@@ -6,6 +6,8 @@ pragma solidity ^0.8.0;
 * EIP-2535 Diamonds: https://eips.ethereum.org/EIPS/eip-2535
 /******************************************************************************/
 import {IDiamondCut} from "../interfaces/IDiamondCut.sol";
+import "../facets/NFT721Facet.sol";
+import "../facets/ERC20Facet.sol";
 
 library LibDiamond {
     error InValidFacetCutAction();
@@ -21,6 +23,15 @@ library LibDiamond {
     error NonEmptyCalldata();
     error EmptyCalldata();
     error InitCallFailed();
+    error ERC20InvalidSender(address sender);
+    error ERC20InvalidSpender(address spender);
+    error ERC20InvalidReceiver(address reciever);
+    error ERC20InvalidApprover(address approver);
+    error ERC20InsufficientBalance(address from, uint256 fromBalance, uint256 value);
+    error ERC20InsufficientAllowance(address spender, uint256 currentAllowance, uint256 value);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
     bytes32 constant DIAMOND_STORAGE_POSITION =
         keccak256("diamond.standard.diamond.storage");
 
@@ -47,6 +58,31 @@ library LibDiamond {
         mapping(bytes4 => bool) supportedInterfaces;
         // owner of the contract
         address contractOwner;
+
+        // ERC721 Storage
+        mapping(uint => address) _ownerOf;
+        mapping(address => uint) _balanceOf;
+        mapping(uint => address) _approvals;
+        mapping(address => mapping(address => bool)) isApprovedForAll;
+
+        // ERC20 variables
+
+        mapping(address => uint256) _balances;
+        mapping(address => mapping(address => uint256)) _allowances;
+        uint256 _totalSupply;
+        string _name;
+        string _symbol;
+
+        // Lending facet variables
+        NFT721Facet nft721Facet;
+        ERC20Facet erc20Facet;
+        address owner;
+        uint256 applicationFee;
+        uint256 maxLoanAmount;
+        uint256 loanDuration;
+        mapping (address => uint) amountBorrowed;
+        mapping (address => uint) loanTime;
+        mapping (address => uint) userTokenId;
     }
 
     function diamondStorage()
@@ -70,6 +106,14 @@ library LibDiamond {
         address previousOwner = ds.contractOwner;
         ds.contractOwner = _newOwner;
         emit OwnershipTransferred(previousOwner, _newOwner);
+    }
+
+    function setDetails() internal {
+        DiamondStorage storage ds = diamondStorage();
+        ds.maxLoanAmount = 100;
+        ds.loanDuration = 1 weeks;
+        ds.applicationFee = 5;
+        ds.owner = msg.sender;
     }
 
     function contractOwner() internal view returns (address contractOwner_) {
